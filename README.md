@@ -120,8 +120,8 @@ cp .env.example .env
 ### Environment Variables
 
 ```env
-VITE_API_BASE_URL=https://whisperbox.koyeb.app
-VITE_WS_URL=wss://whisperbox.koyeb.app/ws
+VITE_API_BASE_URL=
+VITE_WS_URL=
 ```
 
 ### Run Development Server
