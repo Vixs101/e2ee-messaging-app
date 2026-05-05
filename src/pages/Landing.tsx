@@ -29,7 +29,7 @@ export function Landing() {
               clean, direct conversation.
             </p>
 
-            <div className="mt-8 flex justify-center gap-3 flex-col md:flex-row">
+            <div className="mt-8 flex justify-center flex-col md:flex-row gap-2  max-w-xl mx-auto">
               <Link to="/register" className="w-full sm:w-[220px] mx-auto">
                 <Button className="cursor-pointer">GET STARTED</Button>
               </Link>
