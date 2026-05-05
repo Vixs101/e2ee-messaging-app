@@ -7,10 +7,13 @@ import { unwrapPrivateKey } from "../crypto/keys";
 import { authApi } from "../api/auth";
 import { useAuthStore } from "../store/useAuthStore";
 import { wsManager } from "../api/ws";
+import { getAuthErrorMessage, AppError } from "@/lib/errors";
 
 export function Login() {
   const navigate = useNavigate();
   const setSession = useAuthStore(s => s.setSession);
+  const sessionMessage = useAuthStore(s => s.sessionMessage);
+  const setSessionMessage = useAuthStore(s => s.setSessionMessage);
 
   const [form, setForm] = useState({ username: "", password: "" });
   const [error, setError] = useState("");
@@ -22,24 +25,32 @@ export function Login() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setSessionMessage(null);
     setLoading(true);
 
     try {
       const username = form.username.trim().toLowerCase();
       const res = await authApi.login(username, form.password);
 
-
-      const privateKey = await unwrapPrivateKey(
-        res.user.wrapped_private_key,
-        form.password,
-        res.user.pbkdf2_salt
-      );
+      let privateKey: CryptoKey;
+      try {
+        privateKey = await unwrapPrivateKey(
+          res.user.wrapped_private_key,
+          form.password,
+          res.user.pbkdf2_salt
+        );
+      } catch {
+        throw new AppError(
+          "We couldn’t unlock your encrypted keys. Check your password and try again.",
+          "crypto"
+        );
+      }
 
       setSession(res.access_token, res.refresh_token, res.user, privateKey);
       wsManager.connect(res.access_token);
       navigate("/chat");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed. Check your credentials.");
+      setError(getAuthErrorMessage(err, "Login failed. Check your credentials."));
     } finally {
       setLoading(false);
     }
@@ -56,6 +67,18 @@ export function Login() {
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {sessionMessage && (
+            <div className="rounded-lg border border-app-accent/40 bg-app-accent/10 px-3 py-2 text-sm text-app-text">
+              <p>{sessionMessage}</p>
+              <button
+                type="button"
+                onClick={() => setSessionMessage(null)}
+                className="mt-2 font-mono text-[11px] tracking-[0.06em] underline underline-offset-4"
+              >
+                DISMISS
+              </button>
+            </div>
+          )}
           <Input label="Username" value={form.username} onChange={set("username")} placeholder="john_doe" required autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
           <Input label="Password" type="password" value={form.password} onChange={set("password")} placeholder="••••••••" required autoComplete="current-password" />
 

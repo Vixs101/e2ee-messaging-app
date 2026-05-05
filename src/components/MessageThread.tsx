@@ -6,7 +6,9 @@ import { importPublicKey } from "../crypto/keys";
 import { encryptMessage, safeDecrypt } from "../crypto/messaging";
 import { wsManager } from "../api/ws";
 import { EncryptedBadge } from "./EncryptedBadge";
+import { Banner } from "./ui/Banner";
 import { cn } from "@/lib/utils";
+import { toAppError } from "@/lib/errors";
 
 interface DecryptedMessage {
   id: string;
@@ -37,6 +39,8 @@ export function MessageThread({ recipientId, recipientName, isMobile = false, on
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [composerError, setComposerError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const upsertMessage = useCallback((next: DecryptedMessage, optimisticId?: string) => {
@@ -83,13 +87,16 @@ export function MessageThread({ recipientId, recipientName, isMobile = false, on
     async function load() {
       setMessages([]);
       setLoading(true);
+      setHistoryError(null);
       try {
         const msgs = await messagesApi.getHistory(recipientId, accessToken!);
         if (!controller.signal.aborted) {
           await Promise.all(msgs.map((msg) => decryptAndAdd(msg)));
         }
       } catch (err) {
-        if (!controller.signal.aborted) console.error(err);
+        if (!controller.signal.aborted) {
+          setHistoryError(toAppError(err, "Unable to load this conversation.").message);
+        }
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
@@ -126,6 +133,7 @@ export function MessageThread({ recipientId, recipientName, isMobile = false, on
     if (!input.trim() || !accessToken || !privateKey || !user) return;
     const messageText = input.trim();
     const optimisticId = `temp-${crypto.randomUUID()}`;
+    setComposerError(null);
 
     upsertMessage({
       id: optimisticId,
@@ -164,7 +172,7 @@ export function MessageThread({ recipientId, recipientName, isMobile = false, on
         status: "failed",
       });
       setInput((current) => current || messageText);
-      console.error(err);
+      setComposerError(toAppError(err, "Unable to send message.").message);
     } finally {
       setSending(false);
     }
@@ -195,6 +203,22 @@ export function MessageThread({ recipientId, recipientName, isMobile = false, on
       </div>
 
       <div className={isMobile ? "min-w-0 flex-1 overflow-y-auto px-3 pb-2 pt-4" : "min-w-0 flex-1 overflow-y-auto px-5 pb-2 pt-5"}>
+        {historyError && (
+          <Banner
+            message={historyError}
+            actionLabel="RETRY"
+            onAction={() => {
+              setHistoryError(null);
+              setLoading(true);
+              void messagesApi.getHistory(recipientId, accessToken!)
+                .then((msgs) => Promise.all(msgs.map((msg) => decryptAndAdd(msg))))
+                .then(() => setHistoryError(null))
+                .catch((error) => setHistoryError(toAppError(error, "Unable to load this conversation.").message))
+                .finally(() => setLoading(false));
+            }}
+            className="mb-3"
+          />
+        )}
         {loading ? (
           <p className="font-mono text-[11px] text-app-subtext">decrypting messages...</p>
         ) : messages.length === 0 ? (
@@ -207,7 +231,12 @@ export function MessageThread({ recipientId, recipientName, isMobile = false, on
         <div ref={bottomRef} />
       </div>
 
-      <div className={isMobile ? "flex shrink-0 items-end gap-2.5 border-t border-app-border px-3 pb-[calc(12px+env(safe-area-inset-bottom))] pt-2.5" : "flex shrink-0 items-end gap-2.5 border-t border-app-border px-5 pb-5 pt-3"}>
+      <div className={isMobile ? "relative flex shrink-0 items-end gap-2.5 border-t border-app-border px-3 pb-[calc(12px+env(safe-area-inset-bottom))] pt-2.5" : "relative flex shrink-0 items-end gap-2.5 border-t border-app-border px-5 pb-5 pt-3"}>
+        {composerError && (
+          <div className="absolute bottom-full left-0 right-0 px-3 pb-2 md:px-5">
+            <Banner message={composerError} />
+          </div>
+        )}
         <textarea
           value={input}
           onChange={e => setInput(e.target.value)}

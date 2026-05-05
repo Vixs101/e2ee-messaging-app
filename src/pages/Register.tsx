@@ -7,6 +7,7 @@ import { generateKeyPair, exportPublicKey, generateSalt, wrapPrivateKey } from "
 import { authApi } from "../api/auth";
 import { useAuthStore } from "../store/useAuthStore";
 import { wsManager } from "../api/ws";
+import { getRegistrationErrorMessage } from "@/lib/errors";
 
 export function Register() {
   const navigate = useNavigate();
@@ -57,7 +58,7 @@ export function Register() {
       wsManager.connect(res.access_token);
       navigate("/chat");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Registration failed");
+      setError(getRegistrationErrorMessage(err, "Registration failed"));
       setStep("form");
     } finally {
       setLoading(false);

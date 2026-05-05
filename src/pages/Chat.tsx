@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { ConversationList } from "../components/ConversationList";
 import { MessageThread } from "../components/MessageThread";
+import { Banner } from "../components/ui/Banner";
 import { useAuthStore } from "../store/useAuthStore";
 import { useTokenRefresh } from "../hooks/useTokenRefresh";
 import { messagesApi, type ConversationSummary } from "../api/messages";
 import { wsManager } from "../api/ws";
+import { toAppError } from "@/lib/errors";
 
 export function Chat() {
   useTokenRefresh(); 
@@ -14,6 +16,8 @@ export function Chat() {
   const [activeUserId, setActiveUserId] = useState<string | null>(null);
   const [unreadConversationIds, setUnreadConversationIds] = useState<Set<string>>(new Set());
   const [loadingConvos, setLoadingConvos] = useState(true);
+  const [conversationsError, setConversationsError] = useState<string | null>(null);
+  const [connectionBanner, setConnectionBanner] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth <= 768 : false
   );
@@ -35,17 +39,29 @@ export function Chat() {
 
   const refreshConversations = useCallback(async () => {
     if (!accessToken) return;
-    const next = await messagesApi.getConversations(accessToken);
-    setConversations(sortConversations(next));
+    try {
+      const next = await messagesApi.getConversations(accessToken);
+      setConversations(sortConversations(next));
+      setConversationsError(null);
+    } catch (error) {
+      setConversationsError(toAppError(error, "Unable to load conversations.").message);
+    }
   }, [accessToken, sortConversations]);
 
   useEffect(() => {
     if (!accessToken) return;
-    messagesApi.getConversations(accessToken)
-      .then((items) => setConversations(sortConversations(items)))
-      .catch(console.error)
-      .finally(() => setLoadingConvos(false));
-  }, [accessToken, sortConversations]);
+    
+    async function load() {
+      setLoadingConvos(true);
+      try {
+        await refreshConversations();
+      } finally {
+        setLoadingConvos(false);
+      }
+    }
+    
+    void load();
+  }, [accessToken, refreshConversations]);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -54,6 +70,7 @@ export function Chat() {
       if (wsMsg.event !== "message.receive") return;
       const { data } = wsMsg;
 
+      setConnectionBanner(null);
       void refreshConversations();
 
       if (data.from_user_id === user?.id) return;
@@ -74,6 +91,25 @@ export function Chat() {
     };
   }, [accessToken, activeUserId, refreshConversations, user?.id]);
 
+  useEffect(() => {
+    function handleOffline() {
+      setConnectionBanner("You’re offline. Messages may be delayed until your connection returns.");
+    }
+
+    function handleOnline() {
+      setConnectionBanner("Connection restored.");
+      void refreshConversations();
+      window.setTimeout(() => setConnectionBanner((current) => current === "Connection restored." ? null : current), 3000);
+    }
+
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [refreshConversations]);
+
   const handleSelectConversation = useCallback((userId: string | null) => {
     setActiveUserId(userId);
     if (userId) {
@@ -91,13 +127,24 @@ export function Chat() {
   const showList = !isMobile || !activeUserId;
 
   return (
-    <div className="flex min-h-dvh overflow-hidden bg-app-bg">
+    <div className="relative flex min-h-dvh overflow-hidden bg-app-bg">
+      {(conversationsError || connectionBanner) && (
+        <div className="absolute left-4 right-4 top-4 z-20">
+          <Banner
+            message={conversationsError ?? connectionBanner ?? ""}
+            variant={conversationsError ? "error" : "info"}
+            actionLabel={conversationsError ? "RETRY" : undefined}
+            onAction={conversationsError ? () => void refreshConversations() : undefined}
+          />
+        </div>
+      )}
       {showList && (
         <ConversationList
           conversations={conversations}
           activeUserId={activeUserId}
           unreadConversationIds={unreadConversationIds}
           loading={loadingConvos}
+          searchPlaceholder="Find user..."
           isMobile={isMobile}
           onSelect={handleSelectConversation}
           onNewConversation={(userId, displayName, username) => {

@@ -1,16 +1,20 @@
+import { parseApiResponse, toAppError } from "@/lib/errors";
 const BASE = import.meta.env.VITE_API_BASE_URL;
 
 async function post<T>(path: string, body: unknown, token?: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error((await res.json())?.detail ?? res.statusText);
-  return res.json();
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+    return parseApiResponse<T>(res);
+  } catch (error) {
+    throw toAppError(error, "Request failed");
+  }
 }
 
 export interface AuthResponse {

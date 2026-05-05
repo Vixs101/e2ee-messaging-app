@@ -5,14 +5,17 @@ import { usersApi, type UserPublicInfo } from "../api/users";
 import { EncryptedBadge } from "./EncryptedBadge";
 import type { ConversationSummary } from "../api/messages";
 import { Button } from "./ui/Button";
+import { Banner } from "./ui/Banner";
 import { authApi } from "../api/auth";
 import { wsManager } from "../api/ws";
+import { toAppError } from "@/lib/errors";
 
 interface Props {
   conversations: ConversationSummary[];
   activeUserId: string | null;
   unreadConversationIds: Set<string>;
   loading: boolean;
+  searchPlaceholder?: string;
   isMobile: boolean;
   onSelect: (id: string) => void;
   onNewConversation: (id: string, displayName: string, username: string) => void;
@@ -23,6 +26,7 @@ export function ConversationList({
   activeUserId,
   unreadConversationIds,
   loading,
+  searchPlaceholder = "Find user...",
   isMobile,
   onSelect,
   onNewConversation,
@@ -33,15 +37,20 @@ export function ConversationList({
   const [results, setResults] = useState<UserPublicInfo[]>([]);
   const [searching, setSearching] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   async function handleSearch(q: string) {
     setSearch(q);
+    setSearchError(null);
     if (q.length < 2) return setResults([]);
     setSearching(true);
     try {
       const res = await usersApi.search(q, accessToken!);
       setResults(res.filter(u => u.id !== user?.id));
-    } catch { setResults([]); }
+    } catch (error) {
+      setResults([]);
+      setSearchError(toAppError(error, "Unable to search for users.").message);
+    }
     finally { setSearching(false); }
   }
 
@@ -75,7 +84,7 @@ export function ConversationList({
         <input
           value={search}
           onChange={e => handleSearch(e.target.value)}
-          placeholder="Find user..."
+          placeholder={searchPlaceholder}
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
@@ -85,6 +94,8 @@ export function ConversationList({
           <div className="mt-1 px-3 py-2.5 font-mono text-[11px] text-app-subtext">
             searching...
           </div>
+        ) : searchError ? (
+          <Banner message={searchError} className="mt-1" />
         ) : results.length > 0 && (
           <div className="mt-1 overflow-hidden rounded-md border border-app-border bg-app-surface">
             {results.map(u => (
