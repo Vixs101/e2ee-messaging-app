@@ -11,6 +11,7 @@ import { wsManager } from "../api/ws";
 interface Props {
   conversations: ConversationSummary[];
   activeUserId: string | null;
+  unreadConversationIds: Set<string>;
   loading: boolean;
   isMobile: boolean;
   onSelect: (id: string) => void;
@@ -20,6 +21,7 @@ interface Props {
 export function ConversationList({
   conversations,
   activeUserId,
+  unreadConversationIds,
   loading,
   isMobile,
   onSelect,
@@ -115,7 +117,15 @@ export function ConversationList({
                   ? "flex w-full cursor-pointer flex-col gap-[3px] border-b border-app-border bg-transparent px-4 py-[14px] text-left text-app-text transition-colors hover:bg-app-border/30"
                   : "flex w-full cursor-pointer flex-col gap-[3px] border-b border-app-border bg-transparent px-4 py-3 text-left text-app-text transition-colors hover:bg-app-border/30"}
             >
-              <span className="truncate text-sm font-medium">{c.display_name}</span>
+              <div className="flex items-center justify-between gap-3">
+                <span className="truncate text-sm font-medium">{c.display_name}</span>
+                {activeUserId !== c.user_id && unreadConversationIds.has(c.user_id) && (
+                  <span
+                    aria-label="Unread messages"
+                    className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500"
+                  />
+                )}
+              </div>
               <span className="font-mono text-[11px] text-app-subtext">@{c.username}</span>
             </button>
           ))

@@ -16,6 +16,14 @@ interface DecryptedMessage {
   status: "sending" | "sent" | "delivered" | "failed";
 }
 
+function sortMessagesByCreatedAt(messages: DecryptedMessage[]) {
+  return [...messages].sort((a, b) => {
+    const timeDelta = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    if (timeDelta !== 0) return timeDelta;
+    return a.id.localeCompare(b.id);
+  });
+}
+
 interface Props {
   recipientId: string;
   recipientName: string;
@@ -38,7 +46,7 @@ export function MessageThread({ recipientId, recipientName, isMobile = false, on
         : prev;
 
       const existingIndex = withoutOptimistic.findIndex((message) => message.id === next.id);
-      if (existingIndex === -1) return [...withoutOptimistic, next];
+      if (existingIndex === -1) return sortMessagesByCreatedAt([...withoutOptimistic, next]);
 
       const updated = [...withoutOptimistic];
       updated[existingIndex] = {
@@ -49,7 +57,7 @@ export function MessageThread({ recipientId, recipientName, isMobile = false, on
             ? "sending"
             : next.status,
       };
-      return updated;
+      return sortMessagesByCreatedAt(updated);
     });
   }, []);
 
