@@ -66,16 +66,23 @@ export function Chat() {
   useEffect(() => {
     if (!accessToken) return;
 
-    const unsubscribe = wsManager.subscribe((wsMsg) => {
+    const unsubscribe = wsManager.subscribe(async (wsMsg) => {
       if (wsMsg.event !== "message.receive") return;
       const { data } = wsMsg;
 
       setConnectionBanner(null);
-      void refreshConversations();
 
-      if (data.from_user_id === user?.id) return;
+      //  just refresh conversation order in the background
+      if (data.from_user_id === user?.id) {
+        void refreshConversations();
+        return;
+      }
 
       const conversationUserId = data.from_user_id;
+
+
+      await refreshConversations();
+
       if (conversationUserId === activeUserId) return;
 
       setUnreadConversationIds((prev) => {

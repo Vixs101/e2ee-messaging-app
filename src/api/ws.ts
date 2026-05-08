@@ -16,13 +16,15 @@ export type WSMessage = {
   };
 };
 
-type MessageHandler = (msg: WSMessage) => void;
+type MessageHandler = (msg: WSMessage) => void | Promise<void>;
 
 class WebSocketManager {
   private ws: WebSocket | null = null;
   private handlers: Set<MessageHandler> = new Set();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private token: string = "";
+
+  private pendingFrames: WSMessage[] = [];
 
   connect(token: string) {
     this.token = token;
@@ -33,7 +35,12 @@ class WebSocketManager {
       try {
         const msg: WSMessage = JSON.parse(event.data);
         if (msg.event === "message.receive") {
-          this.handlers.forEach((h) => h(msg));
+          if (this.handlers.size === 0) {
+
+            this.pendingFrames.push(msg);
+          } else {
+            this.handlers.forEach((h) => h(msg));
+          }
         }
       } catch {
         // malformed frame — ignore
@@ -57,13 +64,19 @@ class WebSocketManager {
 
   subscribe(handler: MessageHandler) {
     this.handlers.add(handler);
-    return () => this.handlers.delete(handler); 
+
+    if (this.pendingFrames.length > 0) {
+      const frames = this.pendingFrames.splice(0);
+      frames.forEach((msg) => handler(msg));
+    }
+    return () => this.handlers.delete(handler);
   }
 
   private cleanup() {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.ws?.close();
     this.ws = null;
+    this.pendingFrames = [];
   }
 
   disconnect() {
